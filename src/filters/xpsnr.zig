@@ -68,7 +68,6 @@ inline fn calcSquaredErrorAndWeight(
     block_width: usize,
     block_height: usize,
     depth: u6,
-    frame_rate: u32,
     ms_act: *f64,
     width: [3]u32,
     height: [3]u32,
@@ -78,8 +77,6 @@ inline fn calcSquaredErrorAndWeight(
     const w0: usize = width[0];
     const h0: usize = height[0];
     const o_m0 = pic_org[(offset_y * uo + offset_x)..];
-    const o_m1 = pic_org_m1[(offset_y * uo + offset_x)..];
-    const o_m2 = pic_org_m2[(offset_y * uo + offset_x)..];
     const r_m0 = pic_rec[(offset_y * uo + offset_x)..];
     const b_val: usize = if ((w0 * h0) > (2048 * 1152)) 2 else 1;
     const x_act: usize = if (offset_x > 0) 0 else b_val;
