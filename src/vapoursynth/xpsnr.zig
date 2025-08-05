@@ -21,8 +21,12 @@ pub const Data = struct {
     vi: *const vs.VideoInfo = undefined,
     mutex: Mutex = undefined,
 
+    og_m1: []i16 = undefined,
+    og_m2: []i16 = undefined,
+
     depth: u6 = 0,
     num_comps: u8 = 0,
+    frame_rate: u32 = 0,
     max_error_64: u64 = 0,
     num_frames_64: u64 = 0,
     sum_wdist: [3]f64 = .{ 0, 0, 0 },
@@ -61,7 +65,7 @@ fn XPSNR(comptime T: type) type {
                     strides[c] = src1.getStride2(T, c);
                 }
 
-                filter.getWSSE(T, orgp, recp, &wsse64, d.width, d.height, strides, d.depth, d.num_comps);
+                filter.getWSSE(T, orgp, recp, d.og_m1, d.og_m2, &wsse64, d.width, d.height, strides, d.depth, d.num_comps, d.frame_rate);
 
                 var i: u32 = 0;
                 while (i < d.num_comps) : (i += 1) {
@@ -88,9 +92,24 @@ fn xpsnrFree(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API)
     const d: *Data = @ptrCast(@alignCast(instance_data));
     const zapi = ZAPI.init(vsapi, core);
 
+    var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
+    const stdout = bw.writer();
+    stdout.print("XPSNR average, {} frames  ", .{d.vi.numFrames}) catch unreachable;
+    const char = [_]u8{ 'y', 'u', 'v' };
+
+    for (0..d.num_comps) |i| {
+        const xpsnr = filter.getAvgXPSNR(d.sum_wdist[i], d.sum_xpsnr[i], d.width[i], d.height[i], d.max_error_64, d.num_frames_64);
+        stdout.print("{c}: {d:.04}  ", .{ char[i], xpsnr }) catch unreachable;
+    }
+
+    stdout.print("\n", .{}) catch unreachable;
+    bw.flush() catch unreachable;
+
     zapi.freeNode(d.node1);
     zapi.freeNode(d.node2);
 
+    allocator.free(d.og_m1);
+    allocator.free(d.og_m2);
     allocator.destroy(d);
 }
 
@@ -130,12 +149,19 @@ pub fn xpsnrCreate(in: ?*const vs.Map, out: ?*vs.Map, user_data: ?*anyopaque, co
     d.depth = @intCast(d.vi.format.bitsPerSample);
     d.max_error_64 = math.shl(u64, 1, d.depth) - 1;
     d.max_error_64 *= d.max_error_64;
+    d.frame_rate = @intCast(@divTrunc(d.vi.fpsNum, d.vi.fpsDen));
     d.num_comps = @intCast(d.vi.format.numPlanes);
     d.num_frames_64 = @intCast(d.vi.numFrames);
 
     const whv = whFromVi(d.vi);
     d.width = whv.w;
     d.height = whv.h;
+
+    const wh: u32 = whv.w[0] * whv.h[0];
+    d.og_m1 = allocator.alignedAlloc(i16, 32, wh) catch unreachable;
+    d.og_m2 = allocator.alignedAlloc(i16, 32, wh) catch unreachable;
+    @memset(d.og_m1, 0);
+    @memset(d.og_m2, 0);
 
     d.mutex = Mutex{};
 
