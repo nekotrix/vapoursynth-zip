@@ -91,8 +91,6 @@ fn xpsnrFree(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API)
     zapi.freeNode(d.node1);
     zapi.freeNode(d.node2);
 
-    allocator.free(d.og_m1);
-    allocator.free(d.og_m2);
     allocator.destroy(d);
 }
 
