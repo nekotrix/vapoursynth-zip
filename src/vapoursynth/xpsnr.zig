@@ -92,19 +92,6 @@ fn xpsnrFree(instance_data: ?*anyopaque, core: ?*vs.Core, vsapi: ?*const vs.API)
     const d: *Data = @ptrCast(@alignCast(instance_data));
     const zapi = ZAPI.init(vsapi, core);
 
-    var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
-    const stdout = bw.writer();
-    stdout.print("XPSNR average, {} frames  ", .{d.vi.numFrames}) catch unreachable;
-    const char = [_]u8{ 'y', 'u', 'v' };
-
-    for (0..d.num_comps) |i| {
-        const xpsnr = filter.getAvgXPSNR(d.sum_wdist[i], d.sum_xpsnr[i], d.width[i], d.height[i], d.max_error_64, d.num_frames_64);
-        stdout.print("{c}: {d:.04}  ", .{ char[i], xpsnr }) catch unreachable;
-    }
-
-    stdout.print("\n", .{}) catch unreachable;
-    bw.flush() catch unreachable;
-
     zapi.freeNode(d.node1);
     zapi.freeNode(d.node2);
 

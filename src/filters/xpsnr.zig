@@ -42,57 +42,6 @@ fn highds(comptime T: type, x_act: usize, y_act: usize, w_act: usize, h_act: usi
     return saAct;
 }
 
-inline fn diff1st(comptime T: type, w_act: usize, h_act: usize, o_m0: []const T, o_m1: []i16, o: usize) u64 {
-    var taAct: u64 = 0;
-    var y: usize = 0;
-    while (y < h_act) : (y += 2) {
-        var x: usize = 0;
-        while (x < w_act) : (x += 2) {
-            // zig fmt: off
-            const t: i32 = @as(i32, o_m0[y * o + x]) + @as(i32, o_m0[y * o + x + 1]) 
-            + @as(i32, o_m0[(y + 1) * o + x]) + @as(i32, o_m0[(y + 1) * o + x + 1]) 
-            - (@as(i32, o_m1[y * o + x]) + @as(i32, o_m1[y * o + x + 1]) 
-            + @as(i32, o_m1[(y + 1) * o + x]) + @as(i32, o_m1[(y + 1) * o + x + 1]));
-            // zig fmt: on
-            taAct += @abs(t);
-            o_m1[y * o + x] = @intCast(o_m0[y * o + x]);
-            o_m1[(y + 1) * o + x] = @intCast(o_m0[(y + 1) * o + x]);
-            o_m1[y * o + x + 1] = @intCast(o_m0[y * o + x + 1]);
-            o_m1[(y + 1) * o + x + 1] = @intCast(o_m0[(y + 1) * o + x + 1]);
-        }
-    }
-    return (taAct * XPSNR_GAMMA);
-}
-
-inline fn diff2nd(comptime T: type, w_act: usize, h_act: usize, o_m0: []const T, o_m1: []i16, o_m2: []i16, o: usize) u64 {
-    var taAct: u64 = 0;
-    var tt: i64 = 0;
-    var y: usize = 0;
-    while (y < h_act) : (y += 2) {
-        var x: usize = 0;
-        while (x < w_act) : (x += 2) {
-            const t: i32 = @as(i32, o_m0[y * o + x]) + @as(i32, o_m0[y * o + x + 1]) + @as(i32, o_m0[(y + 1) * o + x]) + @as(i32, o_m0[(y + 1) * o + x + 1]) - 2 *
-                (@as(i32, o_m1[y * o + x]) + @as(i32, o_m1[y * o + x + 1]) + @as(i32, o_m1[(y + 1) * o + x]) + @as(i32, o_m1[(y + 1) * o + x + 1])) +
-                @as(i32, o_m2[y * o + x]) + @as(i32, o_m2[y * o + x + 1]) + @as(i32, o_m2[(y + 1) * o + x]) + @as(i32, o_m2[(y + 1) * o + x + 1]);
-
-            taAct += @abs(t);
-
-            tt += @as(i32, o_m1[(y + 1) * o + x + 1]);
-
-            o_m2[y * o + x] = o_m1[y * o + x];
-            o_m2[(y + 1) * o + x] = o_m1[(y + 1) * o + x];
-            o_m2[y * o + x + 1] = o_m1[y * o + x + 1];
-            o_m2[(y + 1) * o + x + 1] = o_m1[(y + 1) * o + x + 1];
-            o_m1[y * o + x] = @intCast(o_m0[y * o + x]);
-            o_m1[(y + 1) * o + x] = @intCast(o_m0[(y + 1) * o + x]);
-            o_m1[y * o + x + 1] = @intCast(o_m0[y * o + x + 1]);
-            o_m1[(y + 1) * o + x + 1] = @intCast(o_m0[(y + 1) * o + x + 1]);
-        }
-    }
-
-    return (taAct * XPSNR_GAMMA);
-}
-
 fn calcSquaredError(comptime T: type, blk_org: []const T, stride: usize, blk_rec: []const T, block_width: usize, block_height: usize) u64 {
     var sse: u64 = 0;
     var y: usize = 0;
@@ -141,7 +90,6 @@ inline fn calcSquaredErrorAndWeight(
     const sse: f64 = @floatFromInt(calcSquaredError(T, o_m0, stride, r_m0, block_width, block_height));
 
     var saAct: u64 = 0;
-    var taAct: u64 = 0;
 
     if ((w_act <= x_act) or (h_act <= y_act)) {
         return sse;
@@ -166,39 +114,6 @@ inline fn calcSquaredErrorAndWeight(
 
     ms_act.* = @as(f64, @floatFromInt(saAct)) / (@as(f64, @floatFromInt(w_act - x_act)) * @as(f64, @floatFromInt(h_act - y_act)));
 
-    if (b_val > 1) {
-        if (frame_rate <= 32) {
-            taAct = diff1st(T, block_width, block_height, o_m0, o_m1, uo);
-        } else {
-            taAct = diff2nd(T, block_width, block_height, o_m0, o_m1, o_m2, uo);
-        }
-    } else {
-        if (frame_rate <= 32) {
-            var y: usize = 0;
-            while (y < block_height) : (y += 1) {
-                var x: usize = 0;
-                while (x < block_width) : (x += 1) {
-                    const t: i32 = @as(i32, o_m0[y * uo + x]) - @as(i32, o_m1[y * uo + x]);
-                    taAct += @as(u64, XPSNR_GAMMA) * @as(u64, @abs(t));
-                    o_m1[y * uo + x] = @intCast(o_m0[y * uo + x]);
-                }
-            }
-        } else {
-            var y: usize = 0;
-            while (y < block_height) : (y += 1) {
-                var x: usize = 0;
-                while (x < block_width) : (x += 1) {
-                    const t: i32 = @as(i32, o_m0[y * uo + x]) - 2 * @as(i32, o_m1[y * uo + x]) + @as(i32, o_m2[y * uo + x]);
-                    taAct += @as(u64, XPSNR_GAMMA) * @as(u64, @abs(t));
-                    o_m2[y * uo + x] = o_m1[y * uo + x];
-                    o_m1[y * uo + x] = @intCast(o_m0[y * uo + x]);
-                }
-            }
-        }
-    }
-
-    ms_act.* += @as(f64, @floatFromInt(taAct)) / (@as(f64, @floatFromInt(block_width)) * @as(f64, @floatFromInt(block_height)));
-
     const sft: usize = @as(usize, 1) << (depth - 6);
     if (ms_act.* < @as(f64, @floatFromInt(sft))) {
         ms_act.* = @as(f64, @floatFromInt(sft));
@@ -207,17 +122,6 @@ inline fn calcSquaredErrorAndWeight(
     ms_act.* *= ms_act.*;
 
     return sse;
-}
-
-pub fn getAvgXPSNR(sqrt_wsse_val: f64, sum_xpsnr_val: f64, width: u64, height: u64, max_error_64: u64, num_frames_64: u64) f64 {
-    const num_frames_64f: f64 = @floatFromInt(num_frames_64);
-    if (sqrt_wsse_val >= num_frames_64f) {
-        const avg_dist: f64 = sqrt_wsse_val / num_frames_64f;
-        const num64: f64 = @floatFromInt(width * height * max_error_64);
-        return @as(f64, 10.0) * @log10(num64 / (avg_dist * avg_dist));
-    }
-
-    return sum_xpsnr_val / num_frames_64f;
 }
 
 pub fn getFrameXPSNR(sqrt_wsse: f64, width: u64, height: u64, max_error_64: u64) f64 {
